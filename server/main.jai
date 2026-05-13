@@ -161,6 +161,7 @@ find_jai_path :: (executable_name: string) -> string, string {
         return "", "";
     }
 
+    while contains(raw_path, "//") raw_path = replace(raw_path, "//", "/");
     path := split(raw_path, "/");
 
     pop(*path); // jai.exe or jai
