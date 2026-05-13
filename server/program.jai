@@ -99,7 +99,8 @@ normalize_path :: (path: string) -> string {
         normalized_path = replace(normalized_path, "file://", "");
     }
 
-    return normalized_path;
+    parsed := parse_path(normalized_path, reduce=true);
+    return path_to_string(parsed);
 }
 
 normalize_and_copy_path :: (path: string) -> string {
@@ -123,9 +124,11 @@ pool_alloc :: (pool: *Pool) -> Allocator {
     return .{pool_allocator_proc, pool};
 }
 
-parse_file :: (path: string, force := false) {
+parse_file :: (input_path: string, force := false) {
     // Reset back to default allocator, we dont want to use pool from "parent" file...
     context.allocator = context.default_allocator;
+
+    path := normalize_path(input_path);
 
     ok, file := table_find(*server.files, path);
     if !force && ok {
@@ -894,7 +897,7 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
 
     for file.loads {
         load_path := trim_right(path_strip_filename(file.path), "/");
-        load_relative_path := join(load_path, "/", it.file);
+        load_relative_path := normalize_path(join(load_path, "/", it.file));
         // @TODO: free load_relative_path
         // defer free(load_relative_path);
 
