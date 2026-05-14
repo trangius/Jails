@@ -497,6 +497,7 @@ LSP_Result_Initialize :: struct {
         workspaceSymbolProvider := true;
 
         definitionProvider := true;
+        renameProvider := true;
         // hoverProvider := true;
 
         signatureHelpProvider: struct {
@@ -544,6 +545,19 @@ LSP_Request_Message_Completion :: struct {
             triggerCharacter: string;
         } @JsonName(context)
     }
+}
+
+LSP_Request_Message_Rename :: struct {
+    using request: LSP_Request_Message;
+    params: struct {
+        textDocument: LSP_Text_Document_Identifier;
+        position: LSP_Position;
+        newName: string;
+    }
+}
+
+LSP_Rename_Result :: struct {
+    changes: JSON_Value;
 }
 
 LSP_Request_Message_Signature_Help :: struct {
