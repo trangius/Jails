@@ -479,13 +479,13 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             handle_rename(body);
 
         case "textDocument/hover";
-            // success, body := json_parse_string(raw_request, LSP_Request_Message_Hover,, temp);
-            // if !success {
-            //     log_error("Unable to parse textDocument/completion message");
-            //     return;
-            // }
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Hover,, temp);
+            if !success {
+                log_error("Unable to parse textDocument/hover message");
+                return;
+            }
 
-            // handle_hover(body);
+            handle_hover(body);
     }
 }
 
