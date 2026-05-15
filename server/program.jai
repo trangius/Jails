@@ -1005,7 +1005,7 @@ select_first_decl :: (decls: []*Declaration, level: int) -> *Declaration {
     return decls[0];
 }
 
-get_node_type :: (root: *Node, solve_array := false, select_decl := select_first_decl, stop_at_procedure := false) -> *Node {
+get_node_type :: (root: *Node, solve_array := false, select_decl := select_first_decl, stop_at_procedure := false, polymorphic_bindings: *Table(string, *Node) = null) -> *Node {
     current_node: *Node = root;
 
     level: int;
@@ -1017,6 +1017,15 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
 
         if current_node.kind == .IDENTIFIER {
             ident := cast(*Identifier, current_node);
+
+            if polymorphic_bindings {
+                ok, bound := table_find(polymorphic_bindings, ident.name);
+                if ok {
+                    current_node = bound;
+                    continue;
+                }
+            }
+
             ident_decls := get_identifier_decls(ident);
 
             if ident_decls.count == 0 {
@@ -1134,6 +1143,12 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
 
         if current_node.kind == .PROCEDURE_CALL {
             proc_call := cast(*Procedure_Call) current_node;
+
+            if !stop_at_procedure {
+                poly_type := get_procedure_call_return_type(proc_call);
+                if poly_type return poly_type;
+            }
+
             current_node = proc_call.procedure;
             continue;
         }
@@ -1200,6 +1215,56 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
     }
 
     return null;
+}
+
+poly_call_depth: int;
+POLY_CALL_DEPTH_LIMIT :: 8;
+
+get_procedure_call_return_type :: (proc_call: *Procedure_Call) -> *Node {
+    if poly_call_depth >= POLY_CALL_DEPTH_LIMIT return null;
+
+    if !proc_call.procedure || proc_call.procedure.kind != .IDENTIFIER return null;
+
+    proc_decls := get_identifier_decls(cast(*Identifier) proc_call.procedure);
+    if proc_decls.count == 0 return null;
+
+    procedures: [..]*Procedure;
+    for proc_decl: proc_decls {
+        type := get_node_type(proc_decl, stop_at_procedure=true);
+        if !type || type.kind != .PROCEDURE continue;
+        array_add(*procedures, cast(*Procedure) type);
+    }
+    if procedures.count == 0 return null;
+
+    procedure := procedures[get_best_overload_for_procedure_call(procedures, proc_call)];
+
+    has_polymorphic_arg: bool;
+    for arg: procedure.arguments {
+        if arg.kind == .POLYMORPHIC_CONSTANT { has_polymorphic_arg = true; break; }
+    }
+    if !has_polymorphic_arg return null;
+
+    if procedure.returns.count == 0 return null;
+    return_type := procedure.returns[0].expression;
+    if !return_type return null;
+
+    bindings: Table(string, *Node);
+    for arg, arg_idx: procedure.arguments {
+        unwrapped := unwrap_polymorphic_constant(arg);
+        if unwrapped == arg continue;
+        if unwrapped.kind != .DECLARATION continue;
+
+        poly_decl := cast(*Declaration) unwrapped;
+        if poly_decl.name.count == 0 continue;
+        if arg_idx >= proc_call.arguments.count continue;
+
+        table_set(*bindings, poly_decl.name, proc_call.arguments[arg_idx]);
+    }
+
+    poly_call_depth += 1;
+    defer poly_call_depth -= 1;
+
+    return get_node_type(return_type, polymorphic_bindings = *bindings);
 }
 
 unwrap_polymorphic_constant :: (node: *Node) -> *Node {
@@ -1519,6 +1584,15 @@ get_path_type :: (path: []*Node, recursion_limit: s16 = 1024) -> *Node {
                     proc_call := cast(*Procedure_Call) node;
                     if !proc_call.procedure || proc_call.procedure.kind != .IDENTIFIER {
                         return null;
+                    }
+
+                    if !current_type {
+                        poly_type := get_procedure_call_return_type(proc_call);
+                        if poly_type {
+                            current_type = poly_type;
+                            resolved_nodes += 1;
+                            continue;
+                        }
                     }
 
                     identifier = cast(*Identifier) proc_call.procedure;
