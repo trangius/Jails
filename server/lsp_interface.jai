@@ -498,7 +498,7 @@ LSP_Result_Initialize :: struct {
 
         definitionProvider := true;
         renameProvider := true;
-        // hoverProvider := true;
+        hoverProvider := true;
 
         signatureHelpProvider: struct {
             triggerCharacters   := string.["("];
@@ -646,8 +646,10 @@ LSP_Completion_Item :: struct {
 }
 
 LSP_Hover :: struct {
-    contents: string;
-    contentFormat:= "markdown";
+    contents: struct {
+        kind := "markdown";
+        value: string;
+    }
 }
 
 LSP_Folding_Range_Client_Capabilities :: struct {

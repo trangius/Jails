@@ -118,6 +118,7 @@ resolve_dot_member :: (ident: *Identifier) -> []*Declaration, bool {
     path = array_view(path, 0, path.count-1);
 
     type := get_path_type(path);
+    // @TODO: polymorphic return types — `proc(T, ...).x` doesn't resolve when proc returns *T or T.
     if !type return decls, true;
 
     decl := get_member_in(type, ident);
@@ -165,6 +166,25 @@ resolve_identifier_for_rename :: (ident: *Identifier) -> []*Declaration {
     if matched return decls;
 
     decls, matched = resolve_dot_member(ident);
+    if matched return decls;
+
+    return get_identifier_decls(ident);
+}
+
+resolve_identifier_for_hover :: (ident: *Identifier) -> []*Declaration {
+    decls, matched := resolve_procedure_named_argument(ident);
+    if matched return decls;
+
+    decls, matched = resolve_struct_literal_field(ident);
+    if matched return decls;
+
+    decls, matched = resolve_assignment_field(ident);
+    if matched return decls;
+
+    decls, matched = resolve_dot_member(ident);
+    if matched return decls;
+
+    decls, matched = resolve_procedure_call_best(ident);
     if matched return decls;
 
     return get_identifier_decls(ident);
