@@ -72,6 +72,22 @@ reset_file :: (using file: Program_File) {
     release(*file.ast_pool);
 }
 
+queue_dependents_for_reanalysis :: (file: *Program_File) {
+    dependents := get_files_that_use(file,, temp);
+    for dependents {
+        array_add_if_unique(*server.files_to_be_analyzed, it);
+    }
+}
+
+remove_file_from_program :: (path: string) {
+    ok, file := table_find(*server.files, path);
+    if !ok return;
+
+    queue_dependents_for_reanalysis(file);
+    table_remove(*server.files, path);
+    // @Cleanup: leak Program_File so stale linked_files pointers stay valid until analyze_files() reruns.
+}
+
 get_file :: (path: string) -> *Program_File {
     ok, file := table_find(*server.files, path);
     if !ok return null;
@@ -191,16 +207,7 @@ parse_file :: (input_path: string, force := false) {
     // log("Parsed: % (nodes: %, declarations: %, pointer: %)", path, file.nodes.count, file.declarations.count, file);
 
     array_add_if_unique(*server.files_to_be_analyzed, file);
-
-    // We must revalidate all files that are using this file in some way.
-    files_using_this_file := get_files_that_use(file,, temp);
-    for file_using_this_file: files_using_this_file {
-        // if array_find(server.files_to_be_analyzed, file_using_this_file) {
-        //     continue;
-        // }
-
-        array_add_if_unique(*server.files_to_be_analyzed, file_using_this_file);
-    }
+    queue_dependents_for_reanalysis(file);
 }
 
 analyze_files :: () {

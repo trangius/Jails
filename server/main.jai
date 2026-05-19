@@ -265,6 +265,24 @@ get_root_from_initialization :: (body: LSP_Request_Message_Initialize) -> (bool,
     return false, "";
 }
 
+register_file_watchers :: () {
+    log("Registering workspace/didChangeWatchedFiles watcher");
+
+    watchers: [1]LSP_File_System_Watcher;
+    watchers[0].globPattern = "**/*.jai";
+
+    registrations: [1]LSP_Registration;
+    registrations[0].id = "jails-file-watch";
+    registrations[0].method = "workspace/didChangeWatchedFiles";
+    registrations[0].registerOptions.watchers = watchers;
+
+    request: LSP_Register_Capability_Request;
+    request.id = 1;
+    request.params.registrations = registrations;
+
+    lsp_send(request);
+}
+
 handle_request :: (request: LSP_Request_Message, raw_request: string) {
     // log("Got %", request.method);
 
@@ -272,6 +290,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
         case "shutdown";
             server.quit = true;
             lsp_respond(request.id, null);
+        case "initialized";
+            register_file_watchers();
         case "initialize";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Initialize,, temp);
             if !success {
@@ -486,6 +506,32 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             }
 
             handle_hover(body);
+
+        case "workspace/didChangeWatchedFiles";
+            success, body := json_parse_string(raw_request, LSP_Did_Change_Watched_Files,, temp);
+            if !success {
+                log_error("Unable to parse workspace/didChangeWatchedFiles message");
+                return;
+            }
+
+            log("workspace/didChangeWatchedFiles: % change(s)", body.params.changes.count);
+
+            touched: bool;
+            for change: body.params.changes {
+                path := normalize_path(change.uri,, temp);
+                log("  % %", change.type, path);
+
+                if has_memory_file(path) continue;
+
+                if change.type == .DELETED {
+                    remove_file_from_program(path);
+                } else {
+                    parse_file(path, true);
+                }
+                touched = true;
+            }
+
+            if touched analyze_files();
     }
 }
 

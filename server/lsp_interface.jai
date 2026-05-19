@@ -182,6 +182,53 @@ LSP_Did_Change_Text_Document :: struct {
     }
 }
 
+LSP_File_Change_Type :: enum u32 {
+    CREATED :: 1;
+    CHANGED :: 2;
+    DELETED :: 3;
+}
+
+LSP_File_Event :: struct {
+    uri: string;
+    type: LSP_File_Change_Type;
+}
+
+LSP_Did_Change_Watched_Files :: struct {
+    using request: LSP_Request_Message;
+    params: struct {
+        changes: []LSP_File_Event;
+    }
+}
+
+LSP_Watch_Kind :: enum_flags u32 {
+    CREATE :: 1;
+    CHANGE :: 2;
+    DELETE :: 4;
+}
+LSP_WATCH_ALL :: cast(u32) (LSP_Watch_Kind.CREATE | LSP_Watch_Kind.CHANGE | LSP_Watch_Kind.DELETE);
+
+LSP_File_System_Watcher :: struct {
+    globPattern: string;
+    kind: u32 = LSP_WATCH_ALL;
+}
+
+LSP_Registration :: struct {
+    id: string;
+    method: string;
+    registerOptions: struct {
+        watchers: []LSP_File_System_Watcher;
+    };
+}
+
+LSP_Register_Capability_Request :: struct {
+    using base: LSP_Message;
+    id: int;
+    method: string = "client/registerCapability";
+    params: struct {
+        registrations: []LSP_Registration;
+    };
+}
+
 LSP_Text_Document_Identifier :: struct {
     uri: string;
 }

@@ -137,6 +137,13 @@ get_memory_file :: (name: string) -> []u8 {
     return content;
 }
 
+has_memory_file :: (name: string) -> bool {
+    lock(*server.memory_files_lock);
+    defer unlock(*server.memory_files_lock);
+    ok, _ := table_find(*server.memory_files, name);
+    return ok;
+}
+
 find_word_in_memory_file :: (file: string, position: LSP_Position, with_start_separator := false, with_end_separator := false) -> string {
     lock(*server.memory_files_lock);
     defer unlock(*server.memory_files_lock);
