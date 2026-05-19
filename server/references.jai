@@ -57,8 +57,14 @@ cursor_target :: (file: *Program_File, cursor_location: Node.Location) -> name: 
     return "", .[], false;
 }
 
+decls_match :: (a: *Declaration, b: *Declaration) -> bool {
+    if a == b return true;
+    if a.name != b.name return false;
+    return a.location.file == b.location.file && a.location.l0 == b.location.l0 && a.location.c0 == b.location.c0;
+}
+
 decls_intersect :: (a: []*Declaration, b: []*Declaration) -> bool {
-    for x: a for y: b if x == y return true;
+    for x: a for y: b if decls_match(x, y) return true;
     return false;
 }
 

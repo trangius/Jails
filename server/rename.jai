@@ -155,7 +155,7 @@ handle_rename :: (request: LSP_Request_Message_Rename) {
             matches: bool;
             for decl: decls {
                 for target: target_decls {
-                    if decl == target {
+                    if decls_match(decl, target) {
                         matches = true;
                         break decl;
                     }
