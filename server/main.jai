@@ -352,15 +352,13 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 }
 
                 absolute_path = normalize_path(absolute_path,, temp);
-                parse_file(absolute_path, true);
+                parse_files_enqueue(absolute_path, true);
             }
 
-            // Parse Runtime Support and Preload
-            {
-                parse_file(tprint("%/modules/Runtime_Support.jai", server.args.jai_path), true);
-                parse_file(tprint("%/modules/Preload.jai", server.args.jai_path), true);
-            }
+            parse_files_enqueue(tprint("%/modules/Runtime_Support.jai", server.args.jai_path), true);
+            parse_files_enqueue(tprint("%/modules/Preload.jai", server.args.jai_path), true);
 
+            parse_files_drain();
 
             analyze_files();
 
@@ -517,6 +515,9 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             log("workspace/didChangeWatchedFiles: % change(s)", body.params.changes.count);
 
             touched: bool;
+            pending: [..]*Program_File;
+            defer array_free(pending);
+
             for change: body.params.changes {
                 path := normalize_path(change.uri,, temp);
                 log("  % %", change.type, path);
@@ -524,11 +525,21 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 if has_memory_file(path) continue;
 
                 if change.type == .DELETED {
+                    if pending.count > 0 {
+                        parse_files_drain();
+                        for f: pending if f queue_dependents_for_reanalysis(f);
+                        array_reset(*pending);
+                    }
                     remove_file_from_program(path);
                 } else {
-                    parse_file(path, true);
+                    array_add(*pending, parse_files_enqueue(path, true));
                 }
                 touched = true;
+            }
+
+            if pending.count > 0 {
+                parse_files_drain();
+                for f: pending if f queue_dependents_for_reanalysis(f);
             }
 
             if touched analyze_files();
@@ -536,6 +547,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 }
 
 main :: () {
+    init(*lsp_send_lock);
     context.logger = lsp_log;
 
     success: bool;
@@ -564,6 +576,8 @@ main :: () {
 
     init_memory_files();
     defer deinit_memory_files();
+
+    parse_pool_init();
 
     while !server.quit {
         body, success := read_message_from_stdin(,, temp);

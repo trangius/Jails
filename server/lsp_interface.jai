@@ -840,9 +840,13 @@ lsp_window_message :: (format: string, args: ..Any, type: LSP_Window_Show_Messag
     free(content);
 }
 
+lsp_send_lock: Mutex;
+
 lsp_send :: (data: $T) {
     body := json_write_string(data);
     defer free(body);
+    lock(*lsp_send_lock);
+    defer unlock(*lsp_send_lock);
     print("Content-Length: %\r\n\r\n%", body.count, body);
 }
 

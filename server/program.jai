@@ -141,37 +141,80 @@ pool_alloc :: (pool: *Pool) -> Allocator {
     return .{pool_allocator_proc, pool};
 }
 
-parse_file :: (input_path: string, force := false) {
-    // Reset back to default allocator, we dont want to use pool from "parent" file...
-    context.allocator = context.default_allocator;
+Parse_Job :: struct {
+    file: *Program_File;
+    reparse: bool;
+}
 
-    path := normalize_path(input_path);
+parse_pool: struct {
+    initialized: bool;
+    workers: [..]Thread;
 
-    ok, file := table_find(*server.files, path);
-    if !force && ok {
-        // log("Skipping % because it already exists", path);
-        return;
+    files_mutex: Mutex;        // guards server.files and server.files_to_be_analyzed
+    queue_mutex: Mutex;
+    work_cond: Condition_Variable;
+    drain_cond: Condition_Variable;
+    queue: [..]Parse_Job;
+    in_flight: int;
+};
+
+parse_pool_init :: () {
+    if parse_pool.initialized return;
+    parse_pool.initialized = true;
+
+    init(*parse_pool.files_mutex);
+    init(*parse_pool.queue_mutex);
+    init(*parse_pool.work_cond);
+    init(*parse_pool.drain_cond);
+
+    n := get_number_of_processors();
+    if n < 2 n = 2;
+    if n > 8 n = 8;
+
+    array_resize(*parse_pool.workers, n);
+    for *t: parse_pool.workers {
+        thread_init(t, parse_worker);
+        thread_start(t);
     }
+}
 
-    // log("Parse file: %", path);
-
-    content := cast(string) get_memory_file(path);
-    content_from_file: bool;
-
-    if content.count == 0 {
-        exists: bool;
-
-        content, exists = read_entire_file(path, log_errors=false);
-        if !exists {
-            // log_error("File % does not exists!", path);
-            return;
+parse_worker :: (thread: *Thread) -> s64 {
+    while true {
+        lock(*parse_pool.queue_mutex);
+        while parse_pool.queue.count == 0 {
+            wait(*parse_pool.work_cond, *parse_pool.queue_mutex);
         }
+        job := pop(*parse_pool.queue);
+        unlock(*parse_pool.queue_mutex);
 
-        content_from_file = true;
+        parse_file_now(job.file, job.reparse);
+        reset_temporary_storage();
+
+        lock(*parse_pool.queue_mutex);
+        parse_pool.in_flight -= 1;
+        if parse_pool.in_flight == 0 wake_all(*parse_pool.drain_cond);
+        unlock(*parse_pool.queue_mutex);
     }
+    return 0;
+}
 
+parse_files_enqueue :: (input_path: string, force := false) -> *Program_File {
+    push_allocator(context.default_allocator);
+
+    path := normalize_path(input_path,, temp);
+
+    file: *Program_File;
+    reparse := false;
+
+    lock(*parse_pool.files_mutex);
+    ok, existing := table_find(*server.files, path);
     if ok {
-        reset_file(file); // clear old data
+        if !force {
+            unlock(*parse_pool.files_mutex);
+            return existing;
+        }
+        file = existing;
+        reparse = true;
     } else {
         file = New(Program_File);
         file.path = copy_string(path);
@@ -180,6 +223,48 @@ parse_file :: (input_path: string, force := false) {
         init_file(file);
         table_add(*server.files, file.path, file);
     }
+    unlock(*parse_pool.files_mutex);
+
+    lock(*parse_pool.queue_mutex);
+    array_add(*parse_pool.queue, Parse_Job.{file=file, reparse=reparse});
+    parse_pool.in_flight += 1;
+    wake(*parse_pool.work_cond);
+    unlock(*parse_pool.queue_mutex);
+
+    return file;
+}
+
+parse_files_drain :: () {
+    lock(*parse_pool.queue_mutex);
+    while parse_pool.in_flight > 0 {
+        wait(*parse_pool.drain_cond, *parse_pool.queue_mutex);
+    }
+    unlock(*parse_pool.queue_mutex);
+}
+
+parse_file_now :: (file: *Program_File, reparse: bool) {
+    push_allocator(context.default_allocator);
+
+    content := cast(string) get_memory_file(file.path);
+    content_from_file: bool;
+
+    if content.count == 0 {
+        exists: bool;
+        content, exists = read_entire_file(file.path, log_errors=false);
+        if !exists {
+            if !reparse {
+                lock(*parse_pool.files_mutex);
+                table_remove(*server.files, file.path);
+                unlock(*parse_pool.files_mutex);
+                free(file.path);
+                free(file);
+            }
+            return;
+        }
+        content_from_file = true;
+    }
+
+    if reparse reset_file(file);
 
     path_without_filename := trim_right(path_strip_filename(file.path), "/");
 
@@ -204,10 +289,16 @@ parse_file :: (input_path: string, force := false) {
     }
 
     if content_from_file free(content);
-    // log("Parsed: % (nodes: %, declarations: %, pointer: %)", path, file.nodes.count, file.declarations.count, file);
 
+    lock(*parse_pool.files_mutex);
     array_add_if_unique(*server.files_to_be_analyzed, file);
-    queue_dependents_for_reanalysis(file);
+    unlock(*parse_pool.files_mutex);
+}
+
+parse_file :: (input_path: string, force := false) {
+    file := parse_files_enqueue(input_path, force);
+    parse_files_drain();
+    if file queue_dependents_for_reanalysis(file);
 }
 
 analyze_files :: () {
@@ -309,7 +400,7 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
             array_add(*data.file.imports, module_import);
         }
 
-        parse_file(path); // @TODO: Run this in another thread?
+        parse_files_enqueue(path);
     }
 
     if node.kind == .USING {
@@ -336,7 +427,7 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 
         load_relative_path := join(data.path_without_filename, _load.file, separator="/");
         array_add(*data.file.loads, _load);
-        parse_file(load_relative_path); // @TODO: Run this in another thread?
+        parse_files_enqueue(load_relative_path);
     }
 
     if !node.parent {
