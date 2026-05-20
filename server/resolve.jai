@@ -155,6 +155,77 @@ resolve_procedure_call_best :: (ident: *Identifier) -> []*Declaration, bool {
     return decls, true;
 }
 
+resolve_positional_struct_literal_member :: (ident: *Identifier) -> []*Declaration, bool {
+    decls: [..]*Declaration;
+
+    if !ident.parent || ident.parent.kind != .UNARY_OPERATION return decls, false;
+    unary_op := cast(*Unary_Operation) ident.parent;
+    if unary_op.operation != .DOT return decls, false;
+
+    if !unary_op.parent || unary_op.parent.kind != .LITERAL return decls, false;
+    literal := cast(*Literal) unary_op.parent;
+    if literal.value_type != .STRUCT return decls, false;
+
+    index := -1;
+    for literal.struct_literal_info.body { if it == unary_op { index = it_index; break; } }
+    if index < 0 return decls, false;
+
+    type_node: *Node = literal.struct_literal_info.type;
+    if !type_node && literal.parent && literal.parent.kind == .LITERAL {
+        outer := cast(*Literal) literal.parent;
+        if outer.value_type == .ARRAY type_node = outer.array_literal_info.element_type;
+    }
+    if !type_node || type_node.kind != .IDENTIFIER return decls, true;
+
+    type_decls := get_identifier_decls(cast(*Identifier) type_node);
+    if type_decls.count == 0 return decls, true;
+
+    struct_decl := type_decls[0];
+    if !struct_decl.expression || struct_decl.expression.kind != .STRUCT return decls, true;
+    _struct := cast(*Struct) struct_decl.expression;
+    if !_struct.block return decls, true;
+
+    field_count := 0;
+    nth_field: *Declaration;
+    for member: _struct.block.members {
+        if member.kind != .DECLARATION continue;
+        if field_count == index { nth_field = cast(*Declaration) member; break; }
+        field_count += 1;
+    }
+    if !nth_field return decls, true;
+
+    field_type := get_node_type(nth_field);
+    if !field_type return decls, true;
+
+    decl := get_member_in(field_type, ident);
+    if decl array_add(*decls, decl);
+
+    return decls, true;
+}
+
+resolve_case_enum_member :: (ident: *Identifier) -> []*Declaration, bool {
+    decls: [..]*Declaration;
+
+    if !ident.parent || ident.parent.kind != .UNARY_OPERATION return decls, false;
+    unary_op := cast(*Unary_Operation) ident.parent;
+    if unary_op.operation != .DOT return decls, false;
+
+    if !unary_op.parent || unary_op.parent.kind != .CASE return decls, false;
+    case_node := cast(*Case) unary_op.parent;
+
+    if !case_node.parent || case_node.parent.kind != .BLOCK return decls, true;
+    if !case_node.parent.parent || case_node.parent.parent.kind != .IF return decls, true;
+    if_node := cast(*If) case_node.parent.parent;
+
+    case_type := get_node_type(if_node.condition, true);
+    if !case_type return decls, true;
+
+    decl := get_member_in(case_type, ident);
+    if decl array_add(*decls, decl);
+
+    return decls, true;
+}
+
 resolve_identifier_for_rename :: (ident: *Identifier) -> []*Declaration {
     decls, matched := resolve_procedure_named_argument(ident);
     if matched return decls;
@@ -163,6 +234,12 @@ resolve_identifier_for_rename :: (ident: *Identifier) -> []*Declaration {
     if matched return decls;
 
     decls, matched = resolve_assignment_field(ident);
+    if matched return decls;
+
+    decls, matched = resolve_positional_struct_literal_member(ident);
+    if matched return decls;
+
+    decls, matched = resolve_case_enum_member(ident);
     if matched return decls;
 
     decls, matched = resolve_dot_member(ident);
@@ -179,6 +256,12 @@ resolve_identifier_for_hover :: (ident: *Identifier) -> []*Declaration {
     if matched return decls;
 
     decls, matched = resolve_assignment_field(ident);
+    if matched return decls;
+
+    decls, matched = resolve_positional_struct_literal_member(ident);
+    if matched return decls;
+
+    decls, matched = resolve_case_enum_member(ident);
     if matched return decls;
 
     decls, matched = resolve_dot_member(ident);

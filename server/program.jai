@@ -49,6 +49,15 @@ array_count_declaration := Declaration.{
     type_inst = xx *s64_node
 };
 
+make_virtual_decl_for_ident :: (ident: *Identifier) -> *Declaration {
+    decl := New(Declaration);
+    decl.name = ident.name;
+    decl.location = ident.location;
+    decl.expression = *empty_identifier;
+    decl.const = true;
+    return decl;
+}
+
 init_file :: (using file: Program_File) {
     init(*declarations);
     // init(*resolved_identifiers);
@@ -585,14 +594,8 @@ add_all_fields_of :: (decls: *[..]*Declaration, node: *Node, filter_name: string
         if member.kind == {
             case .IDENTIFIER;
                 ident := cast(*Identifier) member;
-
-                decl := New(Declaration); // @MEMORY: We should free this or it is temp?
-                decl.name = ident.name;
-                decl.expression = *empty_identifier;
-                decl.location = ident.location;
-                decl.const = true;
-
-                if !filter_name || filter_name == decl.name array_add(decls, decl);
+                if filter_name && filter_name != ident.name continue;
+                array_add(decls, make_virtual_decl_for_ident(ident));
 
             case .DECLARATION;
                 decl := cast(*Declaration) member;
@@ -792,6 +795,8 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
 
             if !from_loc return;
 
+            is_enum_block := block.parent.kind == .ENUM;
+
             for block.members {
 
                 // We only accept `nodes` if they were declared before our cursor/node location.
@@ -823,6 +828,12 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
                         }
 
                         if add_decl array_add(decls, decl);
+
+                    case .IDENTIFIER;
+                        if !is_enum_block continue;
+                        _ident := cast(*Identifier) it;
+                        if name && name != _ident.name continue;
+                        array_add(decls, make_virtual_decl_for_ident(_ident));
                 }
 
             }
@@ -1543,15 +1554,7 @@ get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
                 return get_block_member(_union.block, ident);
             case .IDENTIFIER;
                 _ident := cast(*Identifier) member;
-                if _ident.name == ident.name {
-                    decl := New(Declaration); // @MEMORY: We should free this or it is temp?
-                    decl.name = _ident.name;
-                    decl.expression = *empty_identifier;
-                    decl.location = _ident.location;
-                    decl.const = true;
-
-                    return decl;
-                }
+                if _ident.name == ident.name return make_virtual_decl_for_ident(_ident);
             case .DECLARATION;
                 decl := cast(*Declaration) member;
                 if decl.name == ident.name return xx member;
