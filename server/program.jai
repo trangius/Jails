@@ -1,13 +1,19 @@
 Module_Import :: struct {
     module: string;
     root: string;
+    target: *Program_File;
     is_using: bool;
+}
+
+Resolved_Load :: struct {
+    resolved_path: string;
+    target: *Program_File;
 }
 
 Program_File :: struct {
     path: string;
     imports: [..]Module_Import;
-    loads: [..]*Directive_Load;
+    loads: [..]Resolved_Load;
     nodes: [..]*Node;
     global_block: Block;
     declarations: Table(string, *Declaration);
@@ -310,12 +316,23 @@ parse_file :: (input_path: string, force := false) {
     if file queue_dependents_for_reanalysis(file);
 }
 
+resolve_file_graph :: () {
+    for file: server.files {
+        for *imp: file.imports {
+            imp.target = get_file(imp.root);
+        }
+        for *load: file.loads {
+            load.target = get_file(load.resolved_path);
+        }
+    }
+}
+
 analyze_files :: () {
     for file: server.files_to_be_analyzed {
-        // table_reset(*file.resolved_identifiers);
-        // array_reset(*file.unresolved_identifiers);
         release(*file.analysis_pool);
     }
+
+    resolve_file_graph();
 
     preload_file: *Program_File;
     runtime_support_file: *Program_File;
@@ -343,10 +360,6 @@ analyze_files :: () {
 
         file.linked_files = linked_files;
     }
-
-    // for file: server.files_to_be_analyzed {
-    //     resolve_identifiers(file, global_only=true,, pool_alloc(*file.analysis_pool));
-    // }
 
     array_reset(*server.files_to_be_analyzed);
 }
@@ -434,8 +447,8 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     if node.kind == .DIRECTIVE_LOAD {
         _load := cast(*Directive_Load) node;
 
-        load_relative_path := join(data.path_without_filename, _load.file, separator="/");
-        array_add(*data.file.loads, _load);
+        load_relative_path := normalize_path(join(data.path_without_filename, _load.file, separator="/"));
+        array_add(*data.file.loads, Resolved_Load.{ resolved_path=load_relative_path });
         parse_files_enqueue(load_relative_path);
     }
 
@@ -545,33 +558,32 @@ get_file_links :: (file: *Program_File) -> [..]Linked_File {
     defer array_free(files_that_load_this_file);
 
     for server.files {
-        // This ensure we take into account only files that are being loaded or imported...
         from_import: bool;
 
-        if file.path != it.path {
+        if file != it {
             is_avaiable_from_one_of_the_parents: bool;
 
             for file_that_load_this_file: files_that_load_this_file {
-                already_checked: [..]string;
+                already_checked: [..]*Program_File;
                 defer array_free(already_checked);
 
-                if file_that_load_this_file.path == it.path {
+                if file_that_load_this_file == it {
                     is_avaiable_from_one_of_the_parents = true;
                     break;
                 }
 
-                avaiable, from_import= := is_avaiable_from(file_that_load_this_file, it.path, *already_checked);
+                avaiable, from_import= := is_avaiable_from(file_that_load_this_file, it, *already_checked);
                 if !avaiable continue;
 
                 is_avaiable_from_one_of_the_parents = true;
                 break;
             }
 
-            already_checked: [..]string;
+            already_checked: [..]*Program_File;
             defer array_free(already_checked);
 
             if !is_avaiable_from_one_of_the_parents {
-                avaiable, from_import= := is_avaiable_from(file, it.path, *already_checked);
+                avaiable, from_import= := is_avaiable_from(file, it, *already_checked);
                 if !avaiable continue;
             }
         }
@@ -983,9 +995,9 @@ get_files_that_use :: (target_file: *Program_File) -> []*Program_File {
     files: [..]*Program_File;
 
     for file: server.files {
-        already_checked: [..]string;
+        already_checked: [..]*Program_File;
         defer array_free(already_checked);
-        if !is_avaiable_from(file, target_file.path, *already_checked) continue;
+        if !is_avaiable_from(file, target_file, *already_checked) continue;
         array_add(*files, file);
     }
 
@@ -996,38 +1008,36 @@ get_files_that_load :: (target_file: *Program_File) -> []*Program_File {
     files: [..]*Program_File;
 
     for file: server.files {
-        already_checked: [..]string;
+        already_checked: [..]*Program_File;
         defer array_free(already_checked);
-        if !is_avaiable_from(file, target_file.path, *already_checked, true) continue;
+        if !is_avaiable_from(file, target_file, *already_checked, true) continue;
         array_add(*files, file);
     }
 
     return files;
 }
 
-is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]string, $loads_only := false) -> bool, bool {
+is_avaiable_from :: (file: *Program_File, target: *Program_File, already_checked: *[..]*Program_File, $loads_only := false) -> bool, bool {
     from_import: bool;
     loaded: bool;
 
     #if !loads_only {
         for file.imports {
-            if array_find(already_checked.*, it.root) continue;
-            array_add(already_checked, it.root);
+            if !it.target continue;
+            if array_find(already_checked.*, it.target) continue;
+            array_add(already_checked, it.target);
 
-            if it.root == path {
+            if it.target == target {
                 from_import = true;
                 loaded = true;
                 break;
             }
 
-            next_file := get_file(it.root);
-            if !next_file continue;
-
             found: bool;
             if it.is_using {
-                found = is_avaiable_from(next_file, path, already_checked, false);
+                found = is_avaiable_from(it.target, target, already_checked, false);
             } else {
-                found = is_avaiable_from(next_file, path, already_checked, true);
+                found = is_avaiable_from(it.target, target, already_checked, true);
             }
 
             if found {
@@ -1039,21 +1049,16 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
     }
 
     for file.loads {
-        load_path := trim_right(path_strip_filename(file.path), "/");
-        load_relative_path := normalize_path(join(load_path, "/", it.file));
-        // @TODO: free load_relative_path
-        // defer free(load_relative_path);
+        if !it.target continue;
+        if array_find(already_checked.*, it.target) continue;
+        array_add(already_checked, it.target);
 
-        if array_find(already_checked.*, load_relative_path) continue;
-        array_add(already_checked, load_relative_path);
-
-        if load_relative_path == path {
+        if it.target == target {
             loaded = true;
             break;
         }
 
-        next_file := get_file(load_relative_path);
-        if next_file && is_avaiable_from(next_file, path, already_checked, loads_only) {
+        if is_avaiable_from(it.target, target, already_checked, loads_only) {
             loaded = true;
             break;
         }
