@@ -226,6 +226,38 @@ resolve_case_enum_member :: (ident: *Identifier) -> []*Declaration, bool {
     return decls, true;
 }
 
+resolve_return_enum_member :: (ident: *Identifier) -> []*Declaration, bool {
+    decls: [..]*Declaration;
+
+    if !ident.parent || ident.parent.kind != .UNARY_OPERATION return decls, false;
+    unary_op := cast(*Unary_Operation) ident.parent;
+    if unary_op.operation != .DOT return decls, false;
+
+    if !unary_op.parent || unary_op.parent.kind != .RETURN return decls, false;
+    return_node := cast(*Return) unary_op.parent;
+
+    index := -1;
+    for return_node.returns { if it == unary_op { index = it_index; break; } }
+    if index < 0 return decls, true;
+
+    walker: *Node = return_node.parent;
+    while walker && walker.kind != .PROCEDURE  walker = walker.parent;
+    if !walker return decls, true;
+    procedure := cast(*Procedure) walker;
+    if index >= procedure.returns.count return decls, true;
+
+    return_value := procedure.returns[index];
+    if !return_value.expression return decls, true;
+
+    return_type := get_node_type(return_value.expression, true);
+    if !return_type return decls, true;
+
+    decl := get_member_in(return_type, ident);
+    if decl array_add(*decls, decl);
+
+    return decls, true;
+}
+
 resolve_identifier_for_rename :: (ident: *Identifier) -> []*Declaration {
     decls, matched := resolve_procedure_named_argument(ident);
     if matched return decls;
@@ -240,6 +272,9 @@ resolve_identifier_for_rename :: (ident: *Identifier) -> []*Declaration {
     if matched return decls;
 
     decls, matched = resolve_case_enum_member(ident);
+    if matched return decls;
+
+    decls, matched = resolve_return_enum_member(ident);
     if matched return decls;
 
     decls, matched = resolve_dot_member(ident);
@@ -262,6 +297,9 @@ resolve_identifier_for_hover :: (ident: *Identifier) -> []*Declaration {
     if matched return decls;
 
     decls, matched = resolve_case_enum_member(ident);
+    if matched return decls;
+
+    decls, matched = resolve_return_enum_member(ident);
     if matched return decls;
 
     decls, matched = resolve_dot_member(ident);

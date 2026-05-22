@@ -67,6 +67,19 @@ handle_goto_assignment :: (request: LSP_Request_Message_Definition, ident: *Iden
     return true;
 }
 
+handle_goto_return_enum_member :: (request: LSP_Request_Message_Definition, ident: *Identifier) -> bool {
+    decls, matched := resolve_return_enum_member(ident);
+    if !matched return false;
+
+    if decls.count == 0 {
+        lsp_respond(request.id, null);
+        return true;
+    }
+
+    lsp_respond(request.id, node_location_to_lsp_location(decls[0].location));
+    return true;
+}
+
 handle_procedure_call_goto :: (request: LSP_Request_Message_Definition, ident: *Identifier) -> bool {
     decls, matched := resolve_procedure_call_best(ident);
     if !matched || decls.count == 0 return false;
@@ -129,6 +142,10 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     }
 
     if handle_goto_assignment(request, ident) {
+        return;
+    }
+
+    if handle_goto_return_enum_member(request, ident) {
         return;
     }
 
