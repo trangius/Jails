@@ -235,7 +235,6 @@ parse_files_enqueue :: (input_path: string, force := false) -> *Program_File {
         file.path = copy_string(path);
         set_allocators(*file.ast_pool, context.default_allocator);
         set_allocators(*file.analysis_pool, context.default_allocator);
-        init_file(file);
         table_add(*server.files, file.path, file);
     }
     unlock(*parse_pool.files_mutex);
@@ -423,6 +422,25 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         }
 
         parse_files_enqueue(path);
+    }
+
+    if node.kind == .USING {
+        _using := cast(*Using) node;
+        if _using.expression && _using.expression.kind == .DECLARATION {
+            decl := cast(*Declaration) _using.expression;
+            if decl.expression && decl.expression.kind == .DIRECTIVE_IMPORT {
+                _import := cast(*Directive_Import) decl.expression;
+                path := get_module_import_path(_import, data.path_without_filename);
+                if path.count > 0 path = normalize_path(path);
+
+                module_import: Module_Import;
+                module_import.root = path;
+                module_import.module = _import.module;
+                module_import.is_using = true;
+
+                array_add(*data.file.imports, module_import);
+            }
+        }
     }
 
     if node.kind == .USING {

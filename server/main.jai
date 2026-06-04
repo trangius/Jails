@@ -569,7 +569,6 @@ main :: () {
 
     log("Args are %", server.args);
 
-    init(*server.files);
     defer deinit(*server.files);
 
     server.files_to_be_analyzed.allocator = context.default_allocator;

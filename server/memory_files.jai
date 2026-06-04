@@ -1,6 +1,5 @@
 init_memory_files :: () {
     init(*server.memory_files_lock);
-    init(*server.memory_files);
 }
 
 deinit_memory_files :: () {
