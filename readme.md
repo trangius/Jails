@@ -1,13 +1,32 @@
 # Jails
 Jails is an experimental language server for the Jai programming language.
 
+This is a fork of [SogoCZE/Jails](https://github.com/SogoCZE/Jails) with additional LSP features.
+
+Notice: in the future the original upstream Jails will make a major refactor and add the new features you find here. If you use this repo, you will probably want to revert back to the original once that work is finished.
+
 ## Features
 - Basic Go-To Definition
+- Find References / Find Implementation
+- Rename Symbol
+- Hover
 - Autocomplete for available symbols (types, procedures etc)
 - Signature help for procedure calls
 - Error reporting from the compiler
 
 In the future, the language server will support all other basic stuff you would get from any other LSP. Also, the plan is to support some specific Jai features from an editor support perspective like for example macro evaluation inside the editor etc.
+
+## Fork additions
+
+New LSP capabilities on top of [upstream](https://github.com/SogoCZE/Jails):
+- Find references and find implementation.
+- Rename symbol.
+- Show declaration info on hover.
+- Symbol resolution follows polymorphic return types.
+- Symbol resolution follows `using`-imports (since merged upstream).
+- Rename / find-references / hover work for enum members.
+- Rename / find-references work for for-loop variables.
+- Watches external file changes (edits made outside the editor).
 
 
 ## Usage
