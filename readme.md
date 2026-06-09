@@ -23,7 +23,6 @@ New LSP capabilities on top of [upstream](https://github.com/SogoCZE/Jails):
 - Rename symbol.
 - Show declaration info on hover.
 - Symbol resolution follows polymorphic return types.
-- Symbol resolution follows `using`-imports (since merged upstream).
 - Rename / find-references / hover work for enum members.
 - Rename / find-references work for for-loop variables.
 - Watches external file changes (edits made outside the editor).
