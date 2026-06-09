@@ -243,6 +243,9 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
 handle_types_in_declaration :: (request: LSP_Request_Message_Completion, cursor_node: *Node) -> bool {
     if cursor_node.kind == .UNARY_OPERATION && cursor_node.parent && cursor_node.parent.kind == .DECLARATION {
         node_type := get_node_type(cursor_node.parent);
+        if !node_type {
+            return false;
+        }
 
         return handle_completitions_for_node(request, node_type);
     }
@@ -422,6 +425,65 @@ add_basic_keywords :: (completions: *[..]LSP_Completion_Item) {
     array_add(completions, .{label="for", insertText="for", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
     array_add(completions, .{label="then", insertText="then", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
     array_add(completions, .{label="using", insertText="using", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    array_add(completions, .{label="context", insertText="context", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    array_add(completions, .{label="inline", insertText="inline", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+
+    // array_add(completions, .{label="#if", insertText="#if", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#ifx", insertText="#ifx", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#run", insertText="#run", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#insert", insertText="#insert", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#code", insertText="#code", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#compile_time", insertText="#compile_time", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#modify", insertText="#modify", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#placeholder", insertText="#placeholder", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#bake_arguments", insertText="#bake_arguments", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#expand", insertText="#expand", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#no_reset", insertText="#no_reset", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#assert", insertText="#assert", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#compiler", insertText="#compiler", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#exists", insertText="#exists", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#procedure_name", insertText="#procedure_name", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#location", insertText="#location", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#caller_location", insertText="#caller_location", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#filepath", insertText="#filepath", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#dump", insertText="#dump", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#import", insertText="#import", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#load", insertText="#load", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#module_parameters", insertText="#module_parameters", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#scope_file", insertText="#scope_file", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#scope_export", insertText="#scope_export", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#add_context", insertText="#add_context", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#Context", insertText="#Context", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#foreign", insertText="#foreign", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#elsewhere", insertText="#elsewhere", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#library", insertText="#library", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#c_call", insertText="#c_call", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#cpp_method", insertText="#cpp_method", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#cpp_return_type_is_non_pod", insertText="#cpp_return_type_is_non_pod", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#program_export", insertText="#program_export", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#intrinsic", insertText="#intrinsic", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#no_context", insertText="#no_context", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#type", insertText="#type", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#as", insertText="#as", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#align", insertText="#align", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#overlay", insertText="#overlay", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#no_padding", insertText="#no_padding", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#this", insertText="#this", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#specified", insertText="#specified", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#complete", insertText="#complete", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#type_info_none", insertText="#type_info_none", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#type_info_procedures_are_void_pointers", insertText="#type_info_procedures_are_void_pointers", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#type_info_no_size_complaint", insertText="#type_info_no_size_complaint", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#through", insertText="#through", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#char", insertText="#char", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#string", insertText="#string", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#bytes", insertText="#bytes", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#asm", insertText="#asm", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#no_abc", insertText="#no_abc", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#no_aoc", insertText="#no_aoc", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#no_debug", insertText="#no_debug", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#deprecated", insertText="#deprecated", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
+    // array_add(completions, .{label="#symmetric", insertText="#symmetric", kind=cast(u8) LSP_Completion_Item.Kind.Keyword});
 }
 
 send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*Declaration, should_add_basic_keywords := false) {

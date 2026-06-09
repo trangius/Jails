@@ -1,4 +1,4 @@
-VERSION :: "1.0.0";
+VERSION :: "0.2.22";
 
 MEMORY_DEBUG :: false;
 
@@ -293,6 +293,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
         case "initialized";
             register_file_watchers();
         case "initialize";
+            log("Jails version: %", VERSION);
+
             success, body := json_parse_string(raw_request, LSP_Request_Message_Initialize,, temp);
             if !success {
                 log_error("Unable to parse initialize message");
@@ -365,6 +367,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             to_send: LSP_Result_Initialize;
             lsp_respond(body.id, to_send);
 
+            run_diagnostics();
+
         case "textDocument/definition";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Definition,, temp);
             if !success {
@@ -421,7 +425,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             parse_file(file_path);
             analyze_files();
-            run_diagnostics();
+            // run_diagnostics();
 
             log("File_path: %", file_path);
 

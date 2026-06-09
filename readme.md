@@ -76,6 +76,8 @@ You can create a config file `jails.json` inside your project root to specify:
 - `local modules` (`modules`) - this tells the language server to also search for modules in these folders.
 - `build_root` - entry file for compiling (currently used for running compiler diagnostics - errors in the editor)
 - `intermediate_path` - path where the compiler will store intermediate files (like added strings etc) while running trough Jails diagnostics (error reporting). Usually you can leave this empty and it will default to the compiler default `.build`.
+- `auto_insert_parentheses` - whether to insert parentheses after procedure autocompletion.
+- `use_symbols_from_local_modules` - whether to use symbols from local modules in workspace symbol search.
 
 ```json
 {
@@ -87,7 +89,9 @@ You can create a config file `jails.json` inside your project root to specify:
         "build.jai"
     ],
     "build_root": "build.jai",
-    "intermediate_path": ".build"
+    "intermediate_path": ".build",
+    "auto_insert_parentheses": true,
+    "use_symbols_from_local_modules": true
 }
 ```
 
