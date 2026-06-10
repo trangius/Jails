@@ -56,7 +56,7 @@ This repo uses git submodules. Clone it using `git clone --recurse-submodules`.
 Compile the release version of the server with `jai build.jai - -release`. Jails binary will be generated in the `bin` folder.
 
 ### VS Code
-Jails for VS Code can be downloaded from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ApparentlyStudio.jails) or you can build it yourself. The prebuilt version supports x64 Windows and ARM64 MacOS at the moment.
+Jails for VS Code (trangius fork) can be downloaded from the [GitHub releases](https://github.com/trangius/jails/releases) or you can build it yourself. The prebuilt version supports x64 Windows and ARM64 MacOS at the moment.
 
 #### Manual build
 

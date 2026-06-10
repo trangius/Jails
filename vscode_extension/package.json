@@ -1,18 +1,18 @@
 {
-    "name": "jails",
-    "displayName": "Jai Language",
+    "name": "jails-trangius-fork",
+    "displayName": "Jai Language (trangius fork)",
     "description": "Experimental language support for Jai programming language (Language Server, Syntax highlighting)",
     "icon": "images/icon.png",
     "version": "0.2.22",
-    "publisher": "ApparentlyStudio",
-    "author": "Patrik Smělý (SogoCZE)",
+    "publisher": "trangius",
+    "author": "Krister Trangius",
     "main": "./out/extension.js",
     "activationEvents": [
         "onLanguage:jai"
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/SogoCZE/jai_language_server"
+        "url": "https://github.com/trangius/jails"
     },
     "scripts": {
         "compile": "tsc -b",

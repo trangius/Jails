@@ -21,7 +21,7 @@ export function activate(context: ExtensionContext) {
     const devServerPath = path.normalize(`${extensionPath}/out/${jails_executable}`);
 
     if (!fs.existsSync(devServerPath)) {
-        window.showErrorMessage(`Jails on ${process.platform}-${process.arch} is not yet supported. But you can build Jails yourself https://github.com/SogoCZE/Jails?tab=readme-ov-file#vs-code.`);
+        window.showErrorMessage(`Jails on ${process.platform}-${process.arch} is not yet supported. But you can build Jails yourself https://github.com/trangius/jails?tab=readme-ov-file#vs-code.`);
         process.exit();
     }
 
