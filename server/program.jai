@@ -69,21 +69,26 @@ init_file :: (using file: Program_File) {
     // init(*resolved_identifiers);
 }
 
-deinit_file :: (using file: Program_File) {
-    deinit(*declarations);
-    array_free(nodes);
-    array_free(loads);
-    array_free(imports);
-    release(*file.ast_pool);
-    release(*file.analysis_pool);
-}
+// deinit_file :: (using file: *Program_File) {
+//     deinit(*declarations);
+//     array_free(nodes);
+//     array_free(loads);
+//     array_free(imports);
+//     array_free(comments);
+//     global_block.members.data = null;
+//     global_block.members.count = 0;
+//     release(*file.ast_pool);
+//     release(*file.analysis_pool);
+// }
 
-reset_file :: (using file: Program_File) {
+reset_file :: (using file: *Program_File) {
     table_reset(*declarations);
     array_reset(*nodes);
     array_reset(*loads);
     array_reset(*imports);
     array_reset(*comments);
+    global_block.members.data = null;
+    global_block.members.count = 0;
     release(*file.ast_pool);
 }
 
