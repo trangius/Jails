@@ -663,7 +663,10 @@ LSP_Completion_Item :: struct {
     label: string;
     detail: string;
     insertText: string;
-    documentation: string;
+    documentation: struct {
+        kind := "markdown";
+        value: string;
+    };
     deprecated: bool;
 
     labelDetails: struct {
