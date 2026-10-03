@@ -23,6 +23,17 @@ Program_File :: struct {
 
     ast_pool: Pool;
     analysis_pool: Pool;
+
+    // Guarded by parse_pool.queue_mutex. Two workers must never parse one file at once: they share its
+    // declarations table and ast_pool, which aren't thread-safe (it hung jails at 100% CPU, or crashed it).
+    parse_state: Parse_State;
+    reparse_pending: bool; // Asked for again while PARSING; the worker queues it once more when done.
+}
+
+Parse_State :: enum u8 {
+    IDLE;
+    QUEUED;
+    PARSING;
 }
 
 Linked_File :: struct {
@@ -205,12 +216,26 @@ parse_worker :: (thread: *Thread) -> s64 {
             wait(*parse_pool.work_cond, *parse_pool.queue_mutex);
         }
         job := pop(*parse_pool.queue);
+        job.file.parse_state = .PARSING;
         unlock(*parse_pool.queue_mutex);
 
-        parse_file_now(job.file, job.reparse);
+        freed := parse_file_now(job.file, job.reparse);
         reset_temporary_storage();
 
         lock(*parse_pool.queue_mutex);
+        if !freed {
+            file := job.file;
+            if file.reparse_pending {
+                // It changed again while we parsed it, so parse it once more to pick up the latest content.
+                file.reparse_pending = false;
+                file.parse_state = .QUEUED;
+                array_add(*parse_pool.queue, Parse_Job.{file=file, reparse=true});
+                parse_pool.in_flight += 1;
+                wake(*parse_pool.work_cond);
+            } else {
+                file.parse_state = .IDLE;
+            }
+        }
         parse_pool.in_flight -= 1;
         if parse_pool.in_flight == 0 wake_all(*parse_pool.drain_cond);
         unlock(*parse_pool.queue_mutex);
@@ -226,13 +251,13 @@ parse_files_enqueue :: (input_path: string, force := false) -> *Program_File {
     file: *Program_File;
     reparse := false;
 
+    // Held until the file is queued, so a worker can't remove and free it in parse_file_now meanwhile.
     lock(*parse_pool.files_mutex);
+    defer unlock(*parse_pool.files_mutex);
+
     ok, existing := table_find(*server.files, path);
     if ok {
-        if !force {
-            unlock(*parse_pool.files_mutex);
-            return existing;
-        }
+        if !force return existing;
         file = existing;
         reparse = true;
     } else {
@@ -242,13 +267,20 @@ parse_files_enqueue :: (input_path: string, force := false) -> *Program_File {
         set_allocators(*file.analysis_pool, context.default_allocator);
         table_add(*server.files, file.path, file);
     }
-    unlock(*parse_pool.files_mutex);
 
     lock(*parse_pool.queue_mutex);
-    array_add(*parse_pool.queue, Parse_Job.{file=file, reparse=reparse});
-    parse_pool.in_flight += 1;
-    wake(*parse_pool.work_cond);
-    unlock(*parse_pool.queue_mutex);
+    defer unlock(*parse_pool.queue_mutex);
+
+    // Queue each file at most once (e.g. a didChangeWatchedFiles batch can list a path twice).
+    // A queued job reads the content when it starts, so it already covers this request.
+    if file.parse_state == .PARSING {
+        file.reparse_pending = true;
+    } else if file.parse_state == .IDLE {
+        file.parse_state = .QUEUED;
+        array_add(*parse_pool.queue, Parse_Job.{file=file, reparse=reparse});
+        parse_pool.in_flight += 1;
+        wake(*parse_pool.work_cond);
+    }
 
     return file;
 }
@@ -261,7 +293,8 @@ parse_files_drain :: () {
     unlock(*parse_pool.queue_mutex);
 }
 
-parse_file_now :: (file: *Program_File, reparse: bool) {
+// Returns true when the file didn't exist and was freed; the caller must not touch it then.
+parse_file_now :: (file: *Program_File, reparse: bool) -> freed: bool {
     push_allocator(context.default_allocator);
 
     content := cast(string) get_memory_file(file.path);
@@ -277,8 +310,9 @@ parse_file_now :: (file: *Program_File, reparse: bool) {
                 unlock(*parse_pool.files_mutex);
                 free(file.path);
                 free(file);
+                return true;
             }
-            return;
+            return false;
         }
         content_from_file = true;
     }
@@ -312,6 +346,7 @@ parse_file_now :: (file: *Program_File, reparse: bool) {
     lock(*parse_pool.files_mutex);
     array_add_if_unique(*server.files_to_be_analyzed, file);
     unlock(*parse_pool.files_mutex);
+    return false;
 }
 
 parse_file :: (input_path: string, force := false) {
