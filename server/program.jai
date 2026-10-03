@@ -243,7 +243,9 @@ parse_worker :: (thread: *Thread) -> s64 {
     return 0;
 }
 
-parse_files_enqueue :: (input_path: string, force := false) -> *Program_File {
+// Returns nothing on purpose: a worker frees a new file that turns out not to exist, so a pointer kept
+// until after parse_files_drain could dangle. Look the file up again with queue_dependents_of_path.
+parse_files_enqueue :: (input_path: string, force := false) {
     push_allocator(context.default_allocator);
 
     path := normalize_path(input_path,, temp);
@@ -257,7 +259,7 @@ parse_files_enqueue :: (input_path: string, force := false) -> *Program_File {
 
     ok, existing := table_find(*server.files, path);
     if ok {
-        if !force return existing;
+        if !force return;
         file = existing;
         reparse = true;
     } else {
@@ -281,8 +283,6 @@ parse_files_enqueue :: (input_path: string, force := false) -> *Program_File {
         parse_pool.in_flight += 1;
         wake(*parse_pool.work_cond);
     }
-
-    return file;
 }
 
 parse_files_drain :: () {
@@ -350,8 +350,14 @@ parse_file_now :: (file: *Program_File, reparse: bool) -> freed: bool {
 }
 
 parse_file :: (input_path: string, force := false) {
-    file := parse_files_enqueue(input_path, force);
+    parse_files_enqueue(input_path, force);
     parse_files_drain();
+    queue_dependents_of_path(input_path);
+}
+
+// Call after parse_files_drain with the path given to parse_files_enqueue. Skips a file that was freed for not existing.
+queue_dependents_of_path :: (input_path: string) {
+    file := get_file(normalize_path(input_path,, temp));
     if file queue_dependents_for_reanalysis(file);
 }
 

@@ -519,7 +519,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             log("workspace/didChangeWatchedFiles: % change(s)", body.params.changes.count);
 
             touched: bool;
-            pending: [..]*Program_File;
+            pending: [..]string;
             defer array_free(pending);
 
             for change: body.params.changes {
@@ -531,19 +531,20 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 if change.type == .DELETED {
                     if pending.count > 0 {
                         parse_files_drain();
-                        for f: pending if f queue_dependents_for_reanalysis(f);
+                        for pending queue_dependents_of_path(it);
                         array_reset(*pending);
                     }
                     remove_file_from_program(path);
                 } else {
-                    array_add(*pending, parse_files_enqueue(path, true));
+                    parse_files_enqueue(path, true);
+                    array_add(*pending, path);
                 }
                 touched = true;
             }
 
             if pending.count > 0 {
                 parse_files_drain();
-                for f: pending if f queue_dependents_for_reanalysis(f);
+                for pending queue_dependents_of_path(it);
             }
 
             if touched analyze_files();
