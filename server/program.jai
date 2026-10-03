@@ -659,6 +659,9 @@ get_file_links :: (file: *Program_File) -> [..]Linked_File {
 }
 
 add_all_fields_of :: (decls: *[..]*Declaration, node: *Node, filter_name: string = "") {
+    if !node return;
+    if !enter_resolve() return;
+
     block := get_block_of(node);
     if !block {
         return;
@@ -1217,13 +1220,37 @@ select_first_decl :: (decls: []*Declaration, level: int) -> *Declaration {
     return decls[0];
 }
 
+MAX_RESOLVE_DEPTH :: 256;
+resolve_depth: int;
+
+MAX_TYPE_CHAIN_LENGTH :: 64;
+
+enter_resolve :: () -> bool #expand {
+    resolve_depth += 1;
+    `defer resolve_depth -= 1;
+
+    if resolve_depth > MAX_RESOLVE_DEPTH {
+        log_error("Type resolution depth limit reached (cyclic declarations?), giving up.");
+        return false;
+    }
+
+    return true;
+}
+
 get_node_type :: (root: *Node, solve_array := false, select_decl := select_first_decl, stop_at_procedure := false, polymorphic_bindings: *Table(string, *Node) = null) -> *Node {
+    if !enter_resolve() return null;
+
     current_node: *Node = root;
 
     level: int;
     while true {
         defer level += 1;
         if !current_node break;
+
+        if level > MAX_TYPE_CHAIN_LENGTH {
+            log_error("Type chain too long while resolving % (self-referential declaration?), giving up.", root.kind);
+            return null;
+        }
 
         // log("Resolving type: % (%:%:%)", current_node.kind, current_node.location.file, current_node.location.l0, current_node.location.c0);
 
@@ -1480,6 +1507,8 @@ get_procedure_call_return_type :: (proc_call: *Procedure_Call) -> *Node {
 }
 
 unwrap_polymorphic_constant :: (node: *Node) -> *Node {
+    if !node return null;
+
     if node.kind != .POLYMORPHIC_CONSTANT {
         return node;
     }
@@ -1491,6 +1520,8 @@ unwrap_polymorphic_constant :: (node: *Node) -> *Node {
 
 unwrap_pointer :: (unary_op: *Unary_Operation) -> *Node {
     if unary_op.operation != .POINTER return unary_op;
+
+    if !unary_op.expression return null;
 
     // nested pointers
     if unary_op.expression.kind == .UNARY_OPERATION {
@@ -1615,12 +1646,18 @@ get_block_member_type :: (block: *Block, ident: *Identifier, solve_array := fals
 }
 
 get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
+    if !block return null;
+    if !enter_resolve() return null;
+
     for member: block.members {
         if member.kind == {
             case .UNION;
                 _union := cast(*Union)member;
 
-                return get_block_member(_union.block, ident);
+                if _union.block {
+                    found := get_block_member(_union.block, ident);
+                    if found return found;
+                }
             case .IDENTIFIER;
                 _ident := cast(*Identifier) member;
                 if _ident.name == ident.name return make_virtual_decl_for_ident(_ident);
@@ -1752,7 +1789,7 @@ get_dot_path :: (binary_op: *Binary_Operation, from: *Node) -> []*Node {
     return path;
 }
 
-get_path_type :: (path: []*Node, recursion_limit: s16 = 1024) -> *Node {
+get_path_type :: (path: []*Node, recursion_limit: s16 = 64) -> *Node {
     current_type: *Node;
     resolved_nodes: int;
 
@@ -1761,6 +1798,10 @@ get_path_type :: (path: []*Node, recursion_limit: s16 = 1024) -> *Node {
         // of exhausting our stack and getting killed. A good way to test this is to do
         // a goto definition search on a context's field.
         log_error("Recurisve search limit reached, quitting search");
+        return null;
+    }
+
+    if !enter_resolve() {
         return null;
     }
 
@@ -1897,6 +1938,10 @@ get_path_type :: (path: []*Node, recursion_limit: s16 = 1024) -> *Node {
     }
 
     if current_type && current_type.kind == .IDENTIFIER && current_type.location.file.data != null {
+        if path.count == 1 && path[0] == current_type {
+            return null;
+        }
+
         return get_path_type(.[current_type], recursion_limit - 1);
     }
 
@@ -2118,7 +2163,7 @@ compound_declaration_to_declarations :: (decls: *[..]*Declaration, comp_decl: *C
 
                 proc_node := get_node_type(proc_call, stop_at_procedure = true);
 
-                if proc_node.kind == .PROCEDURE {
+                if proc_node && proc_node.kind == .PROCEDURE {
                     proc := cast(*Procedure) proc_node;
 
                     if it_index < proc.returns.count {

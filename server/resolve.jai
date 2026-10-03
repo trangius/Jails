@@ -20,7 +20,7 @@ resolve_procedure_named_argument :: (ident: *Identifier) -> []*Declaration, bool
 
         for arg: procedure.arguments {
             unwrapped_arg := unwrap_polymorphic_constant(arg);
-            if unwrapped_arg.kind != .DECLARATION continue;
+            if !unwrapped_arg || unwrapped_arg.kind != .DECLARATION continue;
 
             arg_decl := cast(*Declaration) unwrapped_arg;
             if arg_decl.name == ident.name array_add(*decls, arg_decl);
