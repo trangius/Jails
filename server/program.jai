@@ -353,7 +353,7 @@ parse_file_now :: (file: *Program_File, reparse: bool) -> freed: bool {
     content := cast(string) get_memory_file(file.path);
     content_from_file: bool;
 
-    if content.count == 0 {
+    if content.count == 0 && !has_memory_file(file.path) {
         exists: bool;
         content, exists = read_entire_file(file.path, log_errors=false);
         if !exists {
