@@ -177,9 +177,18 @@ Parse_Job :: struct {
     reparse: bool;
 }
 
+// What one worker is parsing right now, for parse_watchdog. Written under queue_mutex.
+Parse_Worker_Slot :: struct {
+    job: u64;     // 0 while idle; a new number for every job.
+    path: string;
+}
+
 parse_pool: struct {
     initialized: bool;
     workers: [..]Thread;
+    slots: [..]Parse_Worker_Slot; // One per worker, never resized after parse_pool_init.
+    next_job: u64;
+    watchdog: Thread;
 
     files_mutex: Mutex;        // guards server.files and server.files_to_be_analyzed
     queue_mutex: Mutex;
@@ -188,6 +197,10 @@ parse_pool: struct {
     queue: [..]Parse_Job;
     in_flight: int;
 };
+
+// Even the biggest file parses in under a second. A parse that takes 30 is stuck, and jails would freeze
+// and burn CPU forever, so we quit instead.
+PARSE_STUCK_SECONDS :: 30;
 
 parse_pool_init :: () {
     if parse_pool.initialized return;
@@ -203,13 +216,20 @@ parse_pool_init :: () {
     if n > 8 n = 8;
 
     array_resize(*parse_pool.workers, n);
+    array_resize(*parse_pool.slots, n);
     for *t: parse_pool.workers {
         thread_init(t, parse_worker);
+        t.data = *parse_pool.slots[it_index];
         thread_start(t);
     }
+
+    thread_init(*parse_pool.watchdog, parse_watchdog);
+    thread_start(*parse_pool.watchdog);
 }
 
 parse_worker :: (thread: *Thread) -> s64 {
+    slot := cast(*Parse_Worker_Slot) thread.data;
+
     while true {
         lock(*parse_pool.queue_mutex);
         while parse_pool.queue.count == 0 {
@@ -217,12 +237,16 @@ parse_worker :: (thread: *Thread) -> s64 {
         }
         job := pop(*parse_pool.queue);
         job.file.parse_state = .PARSING;
+        parse_pool.next_job += 1;
+        slot.job  = parse_pool.next_job;
+        slot.path = job.file.path;
         unlock(*parse_pool.queue_mutex);
 
         freed := parse_file_now(job.file, job.reparse);
         reset_temporary_storage();
 
         lock(*parse_pool.queue_mutex);
+        slot.job = 0;
         if !freed {
             file := job.file;
             if file.reparse_pending {
@@ -239,6 +263,35 @@ parse_worker :: (thread: *Thread) -> s64 {
         parse_pool.in_flight -= 1;
         if parse_pool.in_flight == 0 wake_all(*parse_pool.drain_cond);
         unlock(*parse_pool.queue_mutex);
+    }
+    return 0;
+}
+
+// Quits jails when a parse job has run for PARSE_STUCK_SECONDS.
+parse_watchdog :: (thread: *Thread) -> s64 {
+    last_job: [..]u64;
+    seconds:  [..]int;
+    array_resize(*last_job, parse_pool.slots.count);
+    array_resize(*seconds,  parse_pool.slots.count);
+
+    while true {
+        // Counts polls instead of reading a clock, so a laptop sleeping mid-parse doesn't look stuck.
+        sleep_milliseconds(1000);
+
+        // Read without queue_mutex: if a worker went wrong while holding it, we would block too.
+        // A stuck job's slot doesn't change, so these reads are stable exactly when they matter.
+        for slot, i: parse_pool.slots {
+            job := slot.job;
+            if job && job == last_job[i] seconds[i] += 1;
+            else                         seconds[i] = 0;
+            last_job[i] = job;
+
+            if seconds[i] >= PARSE_STUCK_SECONDS {
+                // Straight to stderr: logging over LSP allocates, and a stuck worker may hold the heap lock.
+                write_string(tprint("jails: parsing % has taken % seconds, so it is stuck; exiting so the editor can restart jails.\n", slot.path, seconds[i]), to_standard_error=true);
+                exit(1);
+            }
+        }
     }
     return 0;
 }
