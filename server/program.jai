@@ -357,15 +357,21 @@ parse_file_now :: (file: *Program_File, reparse: bool) -> freed: bool {
         exists: bool;
         content, exists = read_entire_file(file.path, log_errors=false);
         if !exists {
-            if !reparse {
+            if reparse {
+                // A file we knew was deleted: drop its old contents so nothing points into them anymore.
+                reset_file(file);
                 lock(*parse_pool.files_mutex);
-                table_remove(*server.files, file.path);
+                array_add_if_unique(*server.files_to_be_analyzed, file);
                 unlock(*parse_pool.files_mutex);
-                free(file.path);
-                free(file);
-                return true;
+                return false;
             }
-            return false;
+
+            lock(*parse_pool.files_mutex);
+            table_remove(*server.files, file.path);
+            unlock(*parse_pool.files_mutex);
+            free(file.path);
+            free(file);
+            return true;
         }
         content_from_file = true;
     }
