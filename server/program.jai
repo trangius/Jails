@@ -526,7 +526,7 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
             array_add(*data.file.imports, module_import);
         }
 
-        parse_files_enqueue(path);
+        if path.count > 0 parse_files_enqueue(path); // Empty when the module wasn't found.
     }
 
     if node.kind == .USING {
