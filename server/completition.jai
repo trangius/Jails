@@ -543,6 +543,20 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
                 item.labelDetails.description = ast_print_to_string(preview_node);
         }
 
+        // Documentation shown in the suggestion details panel (toggled with ctrl+space in VS Code).
+        doc_builder: String_Builder;
+        append(*doc_builder, "```jai\n");
+        append_decl_for_hover(*doc_builder, decl);
+        append(*doc_builder, "\n```");
+
+        doc_comment := get_doc_comment_for_decl(decl);
+        if doc_comment.count > 0 {
+            append(*doc_builder, "\n");
+            append(*doc_builder, doc_comment);
+        }
+
+        item.documentation.value = builder_to_string(*doc_builder);
+
         array_add(*completions, item);
     }
 

@@ -44,9 +44,56 @@ handle_hover :: (request: LSP_Request_Message_Hover) {
     append_decl_for_hover(*builder, target_decl);
     append(*builder, "\n```");
 
+    doc_comment := get_doc_comment_for_decl(target_decl);
+    if doc_comment.count > 0 {
+        append(*builder, "\n");
+        append(*builder, doc_comment);
+    }
+
     hover: LSP_Hover;
     hover.contents.value = builder_to_string(*builder);
     lsp_respond(request.id, hover);
+}
+
+get_doc_comment_for_decl :: (decl: *Declaration) -> string {
+    file := get_file(decl.location.file);
+    if !file return "";
+
+    line_above := decl.location.l0 - 1;
+    if line_above < 0 return "";
+
+    // Multiline comment (/* ... */) ending directly above the declaration.
+    for *comment: file.comments {
+        if comment.multiline && comment.l1 == line_above {
+            return trim(comment.string_value);
+        }
+    }
+
+    // Contiguous run of single-line comments (//) directly above the declaration.
+    lines: [..]string;
+    current_line := line_above;
+    while current_line >= 0 {
+        found := false;
+        for *comment: file.comments {
+            if !comment.multiline && comment.l0 == current_line {
+                array_add(*lines, trim(comment.string_value));
+                found = true;
+                break;
+            }
+        }
+        if !found break;
+        current_line -= 1;
+    }
+
+    if lines.count == 0 return "";
+
+    builder: String_Builder;
+    for < line: lines {
+        append(*builder, line);
+        if it_index > 0 append(*builder, "\n");
+    }
+
+    return builder_to_string(*builder);
 }
 
 append_decl_for_hover :: (builder: *String_Builder, decl: *Declaration) {
